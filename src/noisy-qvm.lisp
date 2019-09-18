@@ -67,13 +67,13 @@ The arguments PX, PY and PZ can be interpreted as probabilities of a X, Y or Z e
          (scaled-paulis
            (loop :for sj :in '("X" "Y" "Z")
                  :for pj :in (list px py pz)
-                 :collect (magicl:scale (sqrt pj)
-                                        (quil:gate-matrix
+                 :collect (magicl:scale (quil:gate-matrix
                                          (quil:gate-definition-to-gate
-                                          (quil:lookup-standard-gate sj)))))))
+                                          (quil:lookup-standard-gate sj)))
+                                        (sqrt pj)))))
     (check-type psum (real 0 1))
     (when (< psum 1)
-      (push (magicl:scale (sqrt (- 1.0 psum)) (magicl:make-identity-matrix 2)) scaled-paulis))
+      (push (magicl:scale (magicl:deye #C(1d0 0d0) '(2 2)) (sqrt (- 1.0 psum))) scaled-paulis))
     scaled-paulis))
 
 ;; TODO declare inlinable, turn on optimization
@@ -99,7 +99,7 @@ a noisy identity gate I' as defined in MAKE-PAULI-NOISE-MAP.
         (u (quil:gate-matrix
             (quil:gate-definition-to-gate
              (quil:lookup-standard-gate gate-name)))))
-    (mapcar (lambda (v) (magicl:multiply-complex-matrices v u)) kraus-ops)))
+    (mapcar (lambda (v) (magicl:@ v u)) kraus-ops)))
 
 (defun check-kraus-ops (kraus-ops)
   "Verify that a list KRAUS-OPS of Kraus operators given as MAGICL:MATRIX objects encodes a proper
@@ -109,30 +109,29 @@ of rows and columns. Furthermore, to ensure that the Kraus map preserves trace, 
   sum_{j=1}^n K_j^H K_j = I
 
 where I is the identity matrix of equal dimensions."
-  (let* ((m (magicl:matrix-rows (first kraus-ops)))
-         (n (magicl:matrix-cols (first kraus-ops)))
-         (kraus-sum (magicl:make-zero-matrix m n)))
+  (let* ((m (magicl:nrows (first kraus-ops)))
+         (n (magicl:ncols (first kraus-ops)))
+         (kraus-sum (magicl:const #C(0d0 0d0) (list m n))))
     (assert (= m n) ((first kraus-ops)) "The Kraus operators be square matrices.")
     (loop :for k :in kraus-ops
           :do
-             (assert (= m (magicl:matrix-rows k) (magicl:matrix-cols k))
+             (assert (= m (magicl:nrows k) (magicl:ncols k))
                      (k)
                      "All Kraus operators must have matching dimensions")
              ;; This MAGICL provided BLAS:ZGEMM call effectively performs the following operation
              ;; KRAUS-SUM -> KRAUS-SUM + K^H . K
              (magicl.blas-cffi:%zgemm
               "C" "N" m m m
-              (complex 1d0) (magicl::matrix-data k) m (magicl::matrix-data k) m
-              (complex 1d0) (magicl::matrix-data kraus-sum) m))
+              (complex 1d0) (magicl::storage k) m (magicl::storage k) m
+              (complex 1d0) (magicl::storage kraus-sum) m))
 
     ;; Warning, if this consistently leads to assertion errors increase the
     ;; tolerance *DEFAULT-ZERO-COMPARISON-EPSILON*
-    (let ((magicl::*default-zero-comparison-epsilon* 1d-5))
-      (assert
-       (magicl:identityp kraus-sum)
-       (kraus-sum)
-       "The Kraus map must preserve trace or equivalently this matrix ~
-        ~S must be equal to the identity" kraus-sum))) t)
+    (assert
+     (magicl:identity-matrix-p kraus-sum 1d-5)
+     (kraus-sum)
+     "The Kraus map must preserve trace or equivalently this matrix ~
+        ~S must be equal to the identity" kraus-sum)) t)
 
 (defun check-povm (povm)
   "Verify that the list POVM contains a valid single qubit diagonal POVM.

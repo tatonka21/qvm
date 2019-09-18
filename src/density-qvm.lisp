@@ -180,7 +180,7 @@ recorded outcome j may be different."))
   (:method ((gate quil:simple-gate))
     (make-instance 'quil:simple-gate
                    :name (concatenate 'string (quil:gate-name gate) "*")
-                   :matrix (magicl:conjugate-entrywise (quil:gate-matrix gate))))
+                   :matrix (magicl:map! #'conjugate (quil:gate-matrix gate))))
   (:method ((gate quil:permutation-gate))
     (make-instance 'quil:permutation-gate
                    :name (concatenate 'string (quil:gate-name gate) "*")
@@ -190,7 +190,7 @@ recorded outcome j may be different."))
                    :name (concatenate 'string (quil:gate-name gate) "*")
                    :dimension (quil:gate-dimension gate)
                    :matrix-function #'(lambda (&rest parameters)
-                                        (magicl:conjugate-entrywise
+                                        (magicl:map #'conjugate
                                          (apply #'quil:gate-matrix gate parameters))))))
 
 
